@@ -45,6 +45,18 @@ export default {
 	async fetch(request: Request, env: Env): Promise<Response> {
 		const url = new URL(request.url);
 
+		const corsHeaders = {
+			'Access-Control-Allow-Origin': '*',
+			'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
+			'Access-Control-Allow-Headers': 'Content-Type',
+			'Access-Control-Max-Age': '86400',
+		};
+
+		// Handle CORS preflight
+		if (request.method === 'OPTIONS') {
+			return new Response(null, { status: 200, headers: corsHeaders });
+		}
+
 		// =========================
 		// POST /upload
 		// =========================
@@ -76,9 +88,9 @@ export default {
 
 				return jsonResponse({
 					url: `${url.origin}/download?id=${id}`,
-				});
+				}, 200, corsHeaders);
 			} catch (err) {
-				return jsonResponse({ error: 'Invalid request body' }, 400);
+				return jsonResponse({ error: 'Invalid request body' }, 400, corsHeaders);
 			}
 		}
 
@@ -89,13 +101,13 @@ export default {
 			const id = url.searchParams.get('id');
 
 			if (!id) {
-				return new Response('Missing id', { status: 400 });
+				return new Response('Missing id', { status: 400, headers: corsHeaders });
 			}
 
 			const data = (await env.FILE_KV.get(id, 'json')) as StoredPayload | null;
 
 			if (!data) {
-				return new Response('Expired or invalid', { status: 404 });
+				return new Response('Expired or invalid', { status: 404, headers: corsHeaders });
 			}
 
 			const files = data.files;
@@ -108,15 +120,16 @@ export default {
 					headers: {
 						'Content-Type': `${file.type}; charset=utf-8`,
 						'Content-Disposition': `attachment; filename="${file.filename}"`,
+						...corsHeaders,
 					},
 				});
 			}
 
 			// 🚧 Multiple files → ZIP (future)
-			return new Response('Multiple files not implemented yet', { status: 501 });
+			return new Response('Multiple files not implemented yet', { status: 501, headers: corsHeaders });
 		}
 
-		return new Response('Not found', { status: 404 });
+		return new Response('Not found', { status: 404, headers: corsHeaders });
 	},
 };
 
@@ -124,11 +137,12 @@ export default {
 // Helpers
 // =========================
 
-function jsonResponse(data: unknown, status = 200): Response {
+function jsonResponse(data: unknown, status = 200, additionalHeaders: Record<string, string> = {}): Response {
 	return new Response(JSON.stringify(data), {
 		status,
 		headers: {
 			'Content-Type': 'application/json',
+			...additionalHeaders,
 		},
 	});
 }
